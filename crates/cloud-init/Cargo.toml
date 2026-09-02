@@ -31,7 +31,6 @@ assets = [
     ["target/release/cloud-id", "usr/libexec/cloud-init-rs/", "755"],
     ["target/release/cloud-init-per", "usr/libexec/cloud-init-rs/", "755"],
     ["../../README.md", "usr/share/doc/cloud-init-rs/README.md", "644"],
-    ["../../docs/COMPAT.md", "usr/share/doc/cloud-init-rs/COMPAT.md", "644"],
 ]
 extended-description = """\
 cloud-init-rs is a memory-safe reimplementation of Canonical's cloud-init. It \
