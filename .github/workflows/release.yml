@@ -25,17 +25,14 @@ jobs:
       - run: cargo clippy --all-targets --all-features
       - run: cargo test --all-features
 
-  build:
-    name: build + publish
-    needs: verify
+  version:
+    name: version
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    outputs:
+      v: ${{ steps.derive.outputs.v }}
     steps:
-      - uses: actions/checkout@v7
-
       - name: derive version from tag
-        id: version
+        id: derive
         run: |
           set -eu
           version="${GITHUB_REF_NAME#v}"
@@ -46,41 +43,40 @@ jobs:
           fi
           echo "v=$version" >> "$GITHUB_OUTPUT"
 
-      - name: stamp version into the workspace
-        run: |
-          set -eu
-          version='${{ steps.version.outputs.v }}'
-          # Every crate uses version.workspace = true, so this one line is the
-          # whole workspace. Fail loudly if the placeholder ever moves: a silent
-          # no-op here would ship a release labelled 0.0.0.
-          sed -i "0,/^version = \"0\.0\.0\"$/s//version = \"$version\"/" Cargo.toml
-          grep -qx "version = \"$version\"" Cargo.toml || {
-            echo '::error::placeholder version = "0.0.0" not found in Cargo.toml'
-            exit 1
-          }
+  tarballs:
+    name: musl tarballs
+    needs: [verify, version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
 
       - name: install targets
         run: |
           rustup toolchain install stable --profile minimal
           rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
 
+      - name: stamp version into the workspace
+        run: sh packaging/stamp-version.sh '${{ needs.version.outputs.v }}'
+
       - name: build
-        # Static musl: cloud-init runs inside whatever image the operator boots,
-        # so the binary cannot assume a glibc version. The dependency tree is
-        # pure Rust, so rust-lld cross-links aarch64 without a cross gcc.
+        # Static musl: the tarballs are unpacked into whatever image the
+        # operator boots, so the binaries cannot assume a glibc version. The
+        # .deb is the opposite case and is built natively against Ubuntu's
+        # glibc. The dependency tree is pure Rust, so rust-lld cross-links
+        # aarch64 without a cross gcc.
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: rust-lld
         run: |
           set -eu
           for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
-            cargo build --release --target "$target" \
+            cargo build --release --locked --target "$target" \
               -p cloud-init -p cloud-id -p cloud-init-per
           done
 
       - name: package
         run: |
           set -eu
-          version='${{ steps.version.outputs.v }}'
+          version='${{ needs.version.outputs.v }}'
           mkdir dist
           for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
             stage="cloud-init-rs-$version-$target"
@@ -91,7 +87,64 @@ jobs:
             cp README.md "$stage/"
             tar -czf "dist/$stage.tar.gz" "$stage"
           done
-          (cd dist && sha256sum ./*.tar.gz > SHA256SUMS)
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tarballs
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  deb:
+    name: deb (${{ matrix.arch }})
+    needs: [verify, version]
+    # Native runner per architecture. Nothing is cross-compiled: a native build
+    # lets cargo-deb resolve the real shared-library dependencies, and runs the
+    # test suite on the architecture being shipped.
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: build in ubuntu 26.04
+        # The image, not the runner, decides what the package is built against,
+        # which is why the runner label above can lag behind 26.04.
+        run: |
+          set -eu
+          mkdir -p dist
+          docker run --rm \
+            -e VERSION='${{ needs.version.outputs.v }}' \
+            -v "$PWD:/src:ro" -v "$PWD/dist:/out" \
+            ubuntu:26.04 sh /src/packaging/build-deb.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: deb-${{ matrix.arch }}
+          path: dist/*.deb
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: [version, tarballs, deb]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: checksum
+        # One SHA256SUMS covering both artifact kinds, so there is a single
+        # thing to verify a download against.
+        run: cd dist && sha256sum ./*.tar.gz ./*.deb > SHA256SUMS && cat SHA256SUMS
 
       - uses: softprops/action-gh-release@v3
         with:
