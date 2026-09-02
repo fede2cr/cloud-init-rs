@@ -21,6 +21,10 @@ edition = "2021"
 rust-version = "1.82"
 license = "Apache-2.0 OR GPL-3.0-only"
 repository = "https://github.com/fede2/cloud-init-rs"
+# Ships as distro packages and release tarballs, not crates.io libraries. This
+# also lets the internal path deps stay version-less without tripping
+# cargo-deny's wildcard ban.
+publish = false
 
 [workspace.dependencies]
 # Path-only: these are never published to crates.io, and a version here would be
@@ -57,9 +61,6 @@ regex = { version = "1", default-features = false, features = [
 ] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-# Emitting only, for `status --format=yaml`. Loading goes through ci-config,
-# which needs scalar *style* to reproduce PyYAML's YAML 1.1 implicit resolver.
-serde_yaml_ng = "0.10"
 yaml-rust2 = { version = "0.11", default-features = false }
 tempfile = "3"
 thiserror = "2"

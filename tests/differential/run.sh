@@ -528,6 +528,70 @@ EOF
     done
 fi
 
+# --- yaml emission -----------------------------------------------------------
+# `status --format=yaml` above only exercises whatever state this machine is in,
+# which on a disabled or unbooted host is a flat map of short strings — exactly
+# the shape where any emitter agrees. These fixtures pin the parts that actually
+# differ: indent 4, folding at column 80, and the quoting rules.
+YF_PY="$(cd "$(dirname "$0")" && pwd)/yamlfmt.py"
+YF_RS="$TARGET/examples/dump-yaml"
+if [ -x "$YF_RS" ] && python3 -c 'import cloudinit.safeyaml' 2>/dev/null; then
+    YF_RS="$(cd "$(dirname "$YF_RS")" && pwd)/dump-yaml"
+    YF="$WORK/yamlfmt"
+    mkdir -p "$YF"
+
+    long='DataSourceAzure [seed=/dev/sr0] failed to identify the instance because the metadata service did not respond within the configured timeout window'
+
+    python3 - "$YF" "$long" <<'PYEOF'
+import json, os, sys
+
+out, long = sys.argv[1], sys.argv[2]
+cases = {
+    # A machine that has actually booted, which is what CI runners look like.
+    "booted": {
+        "boot_status_code": "enabled-by-generator",
+        "datasource": "azure",
+        "detail": long,
+        "errors": [long, "short one"],
+        "extended_status": "degraded done",
+        "init": {"errors": [], "finished": 1756757172.1, "start": 1756757170.9},
+        "last_update": "Tue, 01 Sep 2026 19:26:12 +0000",
+        "recoverable_errors": {"ERROR": [], "WARNING": ["Used fallback datasource"]},
+        "status": "done",
+    },
+    "empties": {"a": [], "b": {}, "c": "", "d": None},
+    "typed_strings": {k: k for k in
+        ["yes", "no", "on", "off", "true", "null", "~", "0600", "1.5", "1e3",
+         ".inf", ".nan", "2020-01-02", "12:30:00", "<<", "="]},
+    "indicators": {k: v for k, v in enumerate(
+        ["- x", "#x", "k: v", "? x", "[x]", "{x}", "*x", "&x", "!x", "|x", ">x",
+         "'x", '"x', "%x", "@x", "`x", "---x", "...x", "x #y", "x:y"])},
+    "whitespace": {"a": " lead", "b": "trail ", "c": "a  b", "d": "a\nb",
+                   "e": "a\n\nb", "f": "a \nb", "g": "a\n b", "h": "\nlead"},
+    "unicode": {"a": "caf\u00e9", "b": "\u65e5\u672c\u8a9e", "c": "emoji \U0001f389",
+                "d": "ctrl\x01char", "e": "tab\there"},
+    "numbers": {"a": 0, "b": -1, "c": 1.5, "d": 1756757172.0, "e": 0.1,
+                "f": 123456789012345},
+    "nesting": {"a": {"b": {"c": {"d": ["e", ["f", "g"], {"h": "i"}]}}}},
+    "folding": {"in_seq": [long], "in_map": {"inner": {"msg": long}},
+                "quoted": "it's " + long, "unicode": "caf\u00e9 " + long,
+                "unbroken": "https://example.com/" + "x" * 120},
+    "odd_keys": {"": "empty key", "k" * 200: "long key", "a\nb": "multiline key"},
+}
+for name, value in cases.items():
+    with open(os.path.join(out, name), "w") as handle:
+        json.dump(value, handle)
+PYEOF
+
+    for fixture in "$YF"/*; do
+        [ -f "$fixture" ] || continue
+        name="$(basename "$fixture")"
+        run_pair "yamlfmt $name" \
+            "cd /tmp && python3 '$YF_PY' <'$fixture'" \
+            "cd /tmp && '$YF_RS' <'$fixture'"
+    done
+fi
+
 # --- cloud-id ----------------------------------------------------------------
 if [ -x "$PY_CLOUD_ID" ]; then
     for opts in "" "-l" "-j"; do

@@ -96,6 +96,15 @@ pub(crate) fn type_name(value: &Value) -> &'static str {
     }
 }
 
+/// Whether an unquoted `text` would load back as a string.
+///
+/// Emitters need this to know when a string has to be quoted: `yes`, `0600` and
+/// `~` are all strings that YAML 1.1 would otherwise re-read as another type.
+#[must_use]
+pub fn plain_resolves_to_str(text: &str) -> bool {
+    resolve::resolve(text) == resolve::Tag::Str
+}
+
 /// Count `*alias` references outside of quoted scalars and comments.
 ///
 /// Deliberately conservative: over-counting only makes the limit stricter.

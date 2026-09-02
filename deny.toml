@@ -9,6 +9,9 @@ ignore = []
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# The workspace's own crates are path-only and unpublished, so they have no
+# version requirement to wildcard against. Third-party wildcards still fail.
+allow-wildcard-paths = true
 deny = [
     # Phase 0 policy: no OpenSSL anywhere in the tree.
     { name = "openssl" },

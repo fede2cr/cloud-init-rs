@@ -175,11 +175,7 @@ fn details_map(details: &StatusDetails, status: &str, extended_status: &str) -> 
 /// `safeyaml.dumps()` emits explicit document markers, and upstream `print()`s the
 /// result, adding one more newline after the closing `...`.
 fn render_yaml(value: &Value) -> String {
-    let sorted = ci_core::jsonfmt::sort_keys(value);
-    match serde_yaml_ng::to_string(&sorted) {
-        Ok(body) => format!("---\n{body}...\n\n"),
-        Err(_) => String::new(),
-    }
+    format!("{}\n", ci_core::yamlfmt::dumps(value))
 }
 
 fn value_text(value: &Value) -> String {

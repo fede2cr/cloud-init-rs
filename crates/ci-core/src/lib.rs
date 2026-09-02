@@ -9,6 +9,7 @@ pub mod semaphore;
 pub mod status;
 pub mod time;
 pub mod version;
+pub mod yamlfmt;
 
 pub use jsonfmt::{dumps_indent, json_dumps};
 pub use paths::{Lookup, Paths};

@@ -1,0 +1,5 @@
+# Keep `cargo update` inside the MSRV. Without this, resolution picks the newest
+# semver-compatible release regardless of its rust-version, which is how clap and
+# indexmap pulled in edition 2024 and broke the MSRV job.
+[resolver]
+incompatible-rust-versions = "fallback"

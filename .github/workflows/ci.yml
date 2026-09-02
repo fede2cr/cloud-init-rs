@@ -29,7 +29,9 @@ jobs:
         run: echo "v=$(grep -m1 '^rust-version' Cargo.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
       - run: rustup toolchain install ${{ steps.msrv.outputs.v }} --profile minimal
       - run: rustup override set ${{ steps.msrv.outputs.v }}
-      - run: cargo test --all-features
+      # --locked: the committed lock is the MSRV-compatible resolution. Letting
+      # cargo re-resolve here would hide a lock that no longer builds on MSRV.
+      - run: cargo test --all-features --locked
 
   no-nightly:
     name: stable-toolchain policy
@@ -42,13 +44,16 @@ jobs:
           set -eu
           fail=0
           if grep -rnE '^\s*#!\[(feature|cfg_attr\(.*feature)' crates/ --include='*.rs'; then
-            echo "::error::nightly `#![feature(...)]` gate found"; fail=1
+            echo '::error::nightly #![feature(...)] gate found'; fail=1
           fi
-          if grep -rn 'RUSTC_BOOTSTRAP' . --exclude-dir=target --exclude-dir=.git; then
-            echo "::error::RUSTC_BOOTSTRAP found"; fail=1
+          # Scoped to code and build config: docs and this workflow discuss the
+          # variable by name, and a match there is prose, not an escape hatch.
+          if grep -rn 'RUSTC_BOOTSTRAP' crates tests Cargo.toml rust-toolchain.toml \
+            $([ -d .cargo ] && echo .cargo); then
+            echo '::error::RUSTC_BOOTSTRAP found'; fail=1
           fi
           if ! grep -q 'channel = "stable"' rust-toolchain.toml; then
-            echo "::error::rust-toolchain.toml must pin the stable channel"; fail=1
+            echo '::error::rust-toolchain.toml must pin the stable channel'; fail=1
           fi
           exit "$fail"
 
@@ -83,7 +88,7 @@ jobs:
       - name: check differential drivers were built
         run: |
           set -eu
-          for d in dump-userdata dump-handlers; do
+          for d in dump-userdata dump-handlers dump-yaml; do
             test -x "target/debug/examples/$d" || {
               echo "::error::target/debug/examples/$d missing; parity cases would silently skip"
               exit 1
