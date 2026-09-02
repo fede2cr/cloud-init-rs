@@ -1,0 +1,18 @@
+[package]
+name = "ci-schema"
+description = "JSON Schema draft-04 validation with cloud-init's error message contract"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+regex.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,0 +1,29 @@
+[package]
+name = "cloud-init"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "cloud-init command line interface (Rust port)"
+
+[[bin]]
+name = "cloud-init"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+ci-config.workspace = true
+ci-schema.workspace = true
+ci-core.workspace = true
+ci-sys.workspace = true
+ci-template.workspace = true
+ci-userdata.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+serde_yaml_ng.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

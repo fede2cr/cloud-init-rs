@@ -1,0 +1,92 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  stable:
+    name: build + test (stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets --all-features
+      - run: cargo test --all-features
+
+  msrv:
+    name: build + test (MSRV)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - id: msrv
+        run: echo "v=$(grep -m1 '^rust-version' Cargo.toml | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+      - run: rustup toolchain install ${{ steps.msrv.outputs.v }} --profile minimal
+      - run: rustup override set ${{ steps.msrv.outputs.v }}
+      - run: cargo test --all-features
+
+  no-nightly:
+    name: stable-toolchain policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Goal 5: shipping code must build on stable. Reject nightly escape hatches.
+      - name: reject nightly-only constructs
+        run: |
+          set -eu
+          fail=0
+          if grep -rnE '^\s*#!\[(feature|cfg_attr\(.*feature)' crates/ --include='*.rs'; then
+            echo "::error::nightly `#![feature(...)]` gate found"; fail=1
+          fi
+          if grep -rn 'RUSTC_BOOTSTRAP' . --exclude-dir=target --exclude-dir=.git; then
+            echo "::error::RUSTC_BOOTSTRAP found"; fail=1
+          fi
+          if ! grep -q 'channel = "stable"' rust-toolchain.toml; then
+            echo "::error::rust-toolchain.toml must pin the stable channel"; fail=1
+          fi
+          exit "$fail"
+
+  supply-chain:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2.1.1
+
+  differential:
+    name: parity vs python cloud-init
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install stable --profile minimal
+      # The packaged Python implementation is the oracle: any divergence in
+      # stdout or exit code for a read-only command is a compatibility bug.
+      - name: install upstream cloud-init
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cloud-init
+      # --examples matters: the user-data and part-handler cases are driven by
+      # example binaries, and run.sh skips them when they are absent.
+      - run: cargo build --workspace --bins --examples
+      - name: report versions
+        run: |
+          /usr/bin/cloud-init --version
+          ./target/debug/cloud-init --version
+      # A skipped case looks the same as a passing one in the summary line, so
+      # assert the drivers exist rather than trusting the count.
+      - name: check differential drivers were built
+        run: |
+          set -eu
+          for d in dump-userdata dump-handlers; do
+            test -x "target/debug/examples/$d" || {
+              echo "::error::target/debug/examples/$d missing; parity cases would silently skip"
+              exit 1
+            }
+          done
+      - run: sh tests/differential/run.sh target/debug

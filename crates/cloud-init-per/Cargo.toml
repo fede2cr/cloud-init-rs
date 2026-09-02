@@ -1,0 +1,22 @@
+[package]
+name = "cloud-init-per"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Run a command with a given frequency (Rust port of tools/cloud-init-per)"
+
+[[bin]]
+name = "cloud-init-per"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+ci-core.workspace = true
+ci-sys.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,0 +1,94 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ci-sys",
+    "crates/ci-config",
+    "crates/ci-template",
+    "crates/ci-core",
+    "crates/ci-schema",
+    "crates/ci-userdata",
+    "crates/cloud-init",
+    "crates/cloud-id",
+    "crates/cloud-init-per",
+]
+
+[workspace.package]
+# Stamped from the `v*` tag by .github/workflows/release.yml. Anything built
+# outside a tagged release is 0.0.0 and is not a release build.
+version = "0.0.0"
+edition = "2021"
+# MSRV tracks the oldest toolchain in the supported LTS set, not the newest stable.
+rust-version = "1.82"
+license = "Apache-2.0 OR GPL-3.0-only"
+repository = "https://github.com/fede2/cloud-init-rs"
+
+[workspace.dependencies]
+# Path-only: these are never published to crates.io, and a version here would be
+# a second place the release tag has to be stamped into.
+ci-config = { path = "crates/ci-config" }
+ci-core = { path = "crates/ci-core" }
+ci-schema = { path = "crates/ci-schema" }
+ci-sys = { path = "crates/ci-sys" }
+ci-template = { path = "crates/ci-template" }
+ci-userdata = { path = "crates/ci-userdata" }
+
+# Pure-Rust inflate only: user-data arrives from the network, so no C decoder.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
+clap = { version = "4", default-features = false, features = [
+    "std",
+    "help",
+    "usage",
+    "error-context",
+    "derive",
+    "wrap_help",
+] }
+minijinja = { version = "2", default-features = false, features = [
+    "builtins",
+    "macros",
+    "multi_template",
+    "serde",
+] }
+regex = { version = "1", default-features = false, features = [
+    "std",
+    "perf",
+    "unicode-case",
+    "unicode-perl",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+# Emitting only, for `status --format=yaml`. Loading goes through ci-config,
+# which needs scalar *style* to reproduce PyYAML's YAML 1.1 implicit resolver.
+serde_yaml_ng = "0.10"
+yaml-rust2 = { version = "0.11", default-features = false }
+tempfile = "3"
+thiserror = "2"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Noise from `pedantic` that fights the style used here.
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+# Correctness/robustness lints we do want to be hard failures.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+integer_division = "warn"
+undocumented_unsafe_blocks = "deny"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

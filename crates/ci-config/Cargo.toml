@@ -1,0 +1,22 @@
+[package]
+name = "ci-config"
+description = "cloud-config parsing, cloud.cfg.d merging and merge handlers for cloud-init-rs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ci-sys.workspace = true
+ci-template.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+yaml-rust2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

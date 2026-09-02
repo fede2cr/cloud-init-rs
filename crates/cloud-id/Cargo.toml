@@ -1,0 +1,21 @@
+[package]
+name = "cloud-id"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Report the canonical cloud-id for this instance (Rust port)"
+
+[[bin]]
+name = "cloud-id"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+ci-core.workspace = true
+ci-sys.workspace = true
+clap.workspace = true
+serde_json.workspace = true

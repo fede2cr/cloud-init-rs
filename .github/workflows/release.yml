@@ -1,0 +1,99 @@
+name: release
+
+# The tag is the single source of truth for the version. Cargo.toml carries the
+# placeholder 0.0.0 and is stamped here, so a release can never disagree with
+# the tag it was cut from and there is no version bump commit to forget.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  verify:
+    name: gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets --all-features
+      - run: cargo test --all-features
+
+  build:
+    name: build + publish
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: derive version from tag
+        id: version
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+          if ! printf '%s' "$version" \
+            | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag '$GITHUB_REF_NAME' is not vMAJOR.MINOR.PATCH[-PRERELEASE]"
+            exit 1
+          fi
+          echo "v=$version" >> "$GITHUB_OUTPUT"
+
+      - name: stamp version into the workspace
+        run: |
+          set -eu
+          version='${{ steps.version.outputs.v }}'
+          # Every crate uses version.workspace = true, so this one line is the
+          # whole workspace. Fail loudly if the placeholder ever moves: a silent
+          # no-op here would ship a release labelled 0.0.0.
+          sed -i "0,/^version = \"0\.0\.0\"$/s//version = \"$version\"/" Cargo.toml
+          grep -qx "version = \"$version\"" Cargo.toml || {
+            echo '::error::placeholder version = "0.0.0" not found in Cargo.toml'
+            exit 1
+          }
+
+      - name: install targets
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+
+      - name: build
+        # Static musl: cloud-init runs inside whatever image the operator boots,
+        # so the binary cannot assume a glibc version. The dependency tree is
+        # pure Rust, so rust-lld cross-links aarch64 without a cross gcc.
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: rust-lld
+        run: |
+          set -eu
+          for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+            cargo build --release --target "$target" \
+              -p cloud-init -p cloud-id -p cloud-init-per
+          done
+
+      - name: package
+        run: |
+          set -eu
+          version='${{ steps.version.outputs.v }}'
+          mkdir dist
+          for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+            stage="cloud-init-rs-$version-$target"
+            mkdir "$stage"
+            for bin in cloud-init cloud-id cloud-init-per; do
+              cp "target/$target/release/$bin" "$stage/"
+            done
+            cp README.md "$stage/"
+            tar -czf "dist/$stage.tar.gz" "$stage"
+          done
+          (cd dist && sha256sum ./*.tar.gz > SHA256SUMS)
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          generate_release_notes: true
