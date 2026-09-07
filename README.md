@@ -22,7 +22,7 @@ Port status:
 |1 — Config/CLI|86%|6 — Packaging|53%|
 |2 — Stage engine|80%|7 — Security|39%|
 |3 — Datasources|76%|8 — Distros|20%|
-|4 — Networking	62%|9 — Production|6%|
+|4 — Networking|62%|9 — Production|6%|
 
 
 Compatibility target: upstream cloud-init **26.1**.

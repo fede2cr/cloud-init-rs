@@ -112,6 +112,51 @@ profile for the binaries in this package. None of the three is installed \
 where anything would load it. "cloud-init devel verify-layout" audits a \
 running system against that contract and exits non-zero on drift."""
 
+# The RPM half of the same package, for Azure Linux and Fedora. See
+# packaging/build-rpm.sh, which drives `cargo generate-rpm -p cloud-init` from
+# the workspace root.
+#
+# The file list is deliberately identical to [package.metadata.deb] above: the
+# coexistence claim — nothing outside /usr/libexec/cloud-init-rs and /usr/share,
+# no unit, no scriptlets, no relationship with the distro cloud-init — is the
+# same claim on both, and packaging/build-rpm.sh asserts it against the built
+# .rpm the same way build-deb.sh does against the .deb.
+#
+# `source` is resolved from the directory cargo is run in, which build-rpm.sh
+# guarantees is the workspace root, so these are workspace-relative and carry
+# no `../../` — the opposite of the deb asset paths above, which are relative to
+# this manifest. Getting that backwards is a build-time error, not a silent one.
+[package.metadata.generate-rpm]
+name = "cloud-init-rs"
+summary = "Memory-safe reimplementation of cloud-init (coexistence build)"
+# Set by build-rpm.sh to <n>.azl4 or <n>.fc44: there is no rpmbuild here, so
+# nothing expands %{?dist} for us and the distro tag has to be computed from
+# the container's /etc/os-release.
+release = "1"
+# `auto` finds /usr/lib/rpm/find-requires, which rpm-build provides, so the
+# package picks up the distribution's OpenSSL soname the same way the .deb
+# picks up libssl3 through dpkg-shlibdeps. Never disable this: a static
+# dependency list would silently stop tracking security updates.
+auto-req = "auto"
+# Nothing here is a shell script and there are no scriptlets, so the automatic
+# /bin/sh requirement would be a dependency this package does not have.
+require-sh = false
+assets = [
+    { source = "target/release/cloud-init", dest = "/usr/libexec/cloud-init-rs/cloud-init", mode = "755" },
+    { source = "target/release/cloud-id", dest = "/usr/libexec/cloud-init-rs/cloud-id", mode = "755" },
+    { source = "target/release/cloud-init-per", dest = "/usr/libexec/cloud-init-rs/cloud-init-per", mode = "755" },
+    { source = "target/release/ds-identify", dest = "/usr/libexec/cloud-init-rs/ds-identify", mode = "755" },
+    { source = "target/release/cloud-init-generator", dest = "/usr/libexec/cloud-init-rs/cloud-init-generator", mode = "755" },
+    { source = "packaging/filesystem-contract.toml", dest = "/usr/share/cloud-init-rs/filesystem-contract.toml", mode = "644" },
+    { source = "systemd/tmpfiles.d/cloud-init-rs.conf", dest = "/usr/share/cloud-init-rs/tmpfiles.d/cloud-init-rs.conf", mode = "644" },
+    { source = "selinux/cloud-init-rs.fc", dest = "/usr/share/cloud-init-rs/selinux/cloud-init-rs.fc", mode = "644" },
+    # Inert on both RPM targets, which are SELinux distributions. Shipped anyway
+    # so that one asset list serves every package this project builds, and so a
+    # downstream rebuilding for an AppArmor distro has it.
+    { source = "apparmor/cloud-init-rs", dest = "/usr/share/cloud-init-rs/apparmor/cloud-init-rs", mode = "644" },
+    { source = "README.md", dest = "/usr/share/doc/cloud-init-rs/README.md", mode = "644", doc = true },
+]
+
 [lints]
 workspace = true
 

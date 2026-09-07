@@ -144,9 +144,54 @@ jobs:
           path: dist/*.deb
           if-no-files-found: error
 
+  rpm:
+    name: rpm (${{ matrix.distro }}, ${{ matrix.arch }})
+    needs: [verify, version]
+    # Native runner per architecture, for the same reason as the deb job: the
+    # OpenSSL dependency is resolved by find-requires from the linked binary,
+    # and the test suite runs on the architecture being shipped.
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [azl4, fedora]
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          # Azure Linux 4 is the priority target. It is still published only
+          # under azurelinux-beta -- there is no azurelinux/base/core:4.0 -- so
+          # this tracks a preview image and will need repointing at the GA repo.
+          - distro: azl4
+            image: mcr.microsoft.com/azurelinux-beta/base/core:4.0
+          # Deliberately floating: "the latest Fedora" is the requirement, so a
+          # release built after F45 lands should be an F45 package. The dist tag
+          # in the filename records which one it actually was.
+          - distro: fedora
+            image: registry.fedoraproject.org/fedora:latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: build in ${{ matrix.image }}
+        run: |
+          set -eu
+          mkdir -p dist
+          docker run --rm \
+            -e VERSION='${{ needs.version.outputs.v }}' \
+            -v "$PWD:/src:ro" -v "$PWD/dist:/out" \
+            '${{ matrix.image }}' sh /src/packaging/build-rpm.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rpm-${{ matrix.distro }}-${{ matrix.arch }}
+          path: dist/*.rpm
+          if-no-files-found: error
+
   publish:
     name: publish
-    needs: [version, tarballs, deb]
+    needs: [version, tarballs, deb, rpm]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -157,9 +202,9 @@ jobs:
           merge-multiple: true
 
       - name: checksum
-        # One SHA256SUMS covering both artifact kinds, so there is a single
+        # One SHA256SUMS covering every artifact kind, so there is a single
         # thing to verify a download against.
-        run: cd dist && sha256sum ./*.tar.gz ./*.deb > SHA256SUMS && cat SHA256SUMS
+        run: cd dist && sha256sum ./*.tar.gz ./*.deb ./*.rpm > SHA256SUMS && cat SHA256SUMS
 
       - uses: softprops/action-gh-release@v3
         with:
