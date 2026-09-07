@@ -1,0 +1,105 @@
+#cloud-config
+#
+# User-data for exercising the newly ported package path on a real boot:
+# cc_apt_configure and cc_package_update_upgrade_install (COMPAT deviation 130)
+# plus the `#!`-script handler that feeds cc_scripts_user.
+#
+# The version placeholder below is filled in by tests/vm/seed.sh from
+# `apt-cache policy`, so the [name, version] form is exercised without
+# hard-coding a version that will rot.
+
+# --- cc_apt_configure ------------------------------------------------------
+#
+# `primary` and `security` are deliberately NOT set. That is the whole point:
+# leaving them out is what makes update_mirror_info fall through to
+# `cloud.datasource.get_package_mirror_info()`, which resolves
+# `system_info.package_mirrors` out of the image's own
+# /etc/cloud/cloud.cfg.d/90-azure.cfg and lands on
+# http://azure.archive.ubuntu.com/ubuntu/. Setting `primary` here would short
+# -circuit that path and test nothing but the literal string.
+#
+# On arm64 the failure mode is loud: without that resolution the arch default
+# is http://ports.ubuntu.com/ubuntu-ports, so the script below can tell the two
+# apart by reading the rendered sources file.
+apt:
+  # A free-form apt.conf drop-in, which lands in
+  # /etc/apt/apt.conf.d/94cloud-init-config verbatim.
+  conf: |
+    APT::Get::Assume-Yes "true";
+    APT::Install-Recommends "true";
+
+  # A third-party-style entry fetched by key id: cloud-init asks
+  # keyserver.ubuntu.com for the key, dearmours it into
+  # /etc/apt/cloud-init.gpg.d/, and substitutes that path into $KEY_FILE.
+  #
+  # It is a source-only line for a pocket the deb822 file does not configure,
+  # and both halves of that are load-bearing:
+  #
+  #   * `deb-src` adds a target apt really has to fetch and verify -- proving
+  #     the fetched key was accepted -- without changing which binary packages
+  #     are installable.
+  #   * `-proposed` keeps it off the suites the deb822 file already lists.
+  #     apt refuses to load its sources at all when one URI and suite are
+  #     given two different Signed-By keyrings ("Conflicting values set for
+  #     option Signed-By"), and the deb822 file signs $MIRROR $RELEASE with
+  #     the distribution keyring, not with ours.
+  #
+  # $MIRROR and $RELEASE come from the mirror info above, so a correct render
+  # is itself evidence the mirror resolution worked.
+  sources:
+    cloud-init-rs-test.list:
+      source: "deb-src [signed-by=$KEY_FILE] $MIRROR $RELEASE-proposed main"
+      # Ubuntu Archive Automatic Signing Key (2018); on keyserver.ubuntu.com.
+      keyid: F6ECB3762474EDA9D21B7022871920D1991BC93C
+
+# The two halves the module treats separately: `update` runs `apt-get update`,
+# `upgrade` runs `apt-get dist-upgrade` and, on Ubuntu only, `snap get system
+# -d` followed by `snap refresh` unless refresh.hold is "forever".
+package_update: true
+package_upgrade: true
+
+# Left false on purpose. The module still evaluates the whole condition --
+# flag AND a reboot marker AND a reason -- so the test can assert it decided
+# not to reboot, rather than assert that nothing happened.
+package_reboot_if_required: false
+
+# `ssh_deletekeys` is deliberately NOT set, so this boot runs the default --
+# true -- on a new instance-id: cc_ssh deletes every host key and regenerates
+# them. That is the sequence that left this VM with a dead sshd on 2026-09-05
+# (the plan skipped generation for the keys it was about to delete), so the
+# test now covers it rather than opting out of it. The script asserts the keys
+# came back and that sshd accepts them; `az vm run-command` is the way back in
+# if it ever regresses.
+
+# The four shapes expand_package_list accepts, deliberately mixed:
+#   - a bare name                       -> apt-get install sl
+#   - a [name, version] pair            -> apt-get install hello=<version>
+#   - an explicit {apt: [...]} mapping  -> routed to the apt manager
+#   - an explicit {snap: [...]} mapping -> routed to the snap manager
+packages:
+  - sl
+  - [hello, "@HELLO_VERSION@"]
+  - apt:
+      - jq
+      - tree
+  - snap:
+      - hello-world
+
+write_files:
+  - path: /var/log/cloud-init-rs-test/expected.json
+    permissions: "0644"
+    content: |
+      {
+        "apt": ["sl", "hello", "jq", "tree"],
+        "snap": ["hello-world"],
+        "pinned": {"hello": "@HELLO_VERSION@"}
+      }
+
+# runcmd writes into <instance>/scripts, the same directory cc_scripts_user
+# runs, so this proves the two sources interleave rather than replace.
+#
+# The explicit path is deliberate: sl installs to /usr/games/sl, and cloud-init
+# runs its modules with a PATH that has no /usr/games in it, so `command -v sl`
+# here fails on a machine where sl is installed and working.
+runcmd:
+  - [sh, -c, 'test -x /usr/games/sl && echo runcmd-saw-sl >>/var/log/cloud-init-rs-test/marker']

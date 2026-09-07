@@ -1,0 +1,30 @@
+[package]
+name = "ci-modules"
+description = "The cc_* config module registry and the engine that runs it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ci-config.workspace = true
+ci-core.workspace = true
+ci-distro.workspace = true
+ci-gpg.workspace = true
+ci-log.workspace = true
+ci-ssh.workspace = true
+ci-sys.workspace = true
+ci-template.workspace = true
+ci-url.workspace = true
+regex.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+flate2 = { workspace = true }
+serde_json.workspace = true
+tempfile.workspace = true

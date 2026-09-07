@@ -1,6 +1,0 @@
-#cloud-config
-write_files:
-- content: |
-    15 * * * * root ship_logs
-  path: /etc/crontab
-  append: true

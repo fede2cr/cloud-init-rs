@@ -1,2 +1,0 @@
-#cloud-config
-no_ssh_fingerprints: true

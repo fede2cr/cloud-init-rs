@@ -1,3 +1,0 @@
-#cloud-config
-mounts:
-- [ /dev/sr0, "/mnt/Cdrom Drive", auto, "uid=1000,gid=1000", "0", "0" ]

@@ -1,0 +1,167 @@
+name: release
+
+# The tag is the single source of truth for the version. Cargo.toml carries the
+# placeholder 0.0.0 and is stamped here, so a release can never disagree with
+# the tag it was cut from and there is no version bump commit to forget.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  verify:
+    name: gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets
+      - run: cargo test
+
+  version:
+    name: version
+    runs-on: ubuntu-latest
+    outputs:
+      v: ${{ steps.derive.outputs.v }}
+    steps:
+      - name: derive version from tag
+        id: derive
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#v}"
+          if ! printf '%s' "$version" \
+            | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag '$GITHUB_REF_NAME' is not vMAJOR.MINOR.PATCH[-PRERELEASE]"
+            exit 1
+          fi
+          echo "v=$version" >> "$GITHUB_OUTPUT"
+
+  tarballs:
+    name: musl tarballs
+    needs: [verify, version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: install targets
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+          cargo install cross --git https://github.com/cross-rs/cross --locked
+
+      - name: stamp version into the workspace
+        run: sh packaging/stamp-version.sh '${{ needs.version.outputs.v }}'
+
+      - name: build
+        # Static musl: the tarballs are unpacked into whatever image the
+        # operator boots, so the binaries cannot assume a glibc version. The
+        # .deb is the opposite case and is built natively against Ubuntu's
+        # glibc and libssl.
+        #
+        # Built through `cross` rather than plain cargo because openssl-sys
+        # needs a C toolchain and an OpenSSL for the *target*: the runner has
+        # neither for musl, and cross's images have both. `vendored-openssl`
+        # then builds OpenSSL from source and links it in statically, which is
+        # the only way to get a self-contained binary and the reason these
+        # tarballs, unlike the .deb, do not inherit the distribution's OpenSSL
+        # security updates. That is called out in the release notes.
+        run: |
+          set -eu
+          for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+            cross build --release --locked --target "$target" \
+              --features vendored-openssl \
+              -p cloud-init -p cloud-id -p cloud-init-per \
+              -p ds-identify -p cloud-init-generator
+          done
+
+      - name: package
+        run: |
+          set -eu
+          version='${{ needs.version.outputs.v }}'
+          mkdir dist
+          for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+            stage="cloud-init-rs-$version-$target"
+            mkdir "$stage"
+            for bin in cloud-init cloud-id cloud-init-per \
+                       ds-identify cloud-init-generator; do
+              cp "target/$target/release/$bin" "$stage/"
+            done
+            # The layout both implementations are expected to honour, and the
+            # tmpfiles fragment generated from it. An operator unpacking this
+            # into an image needs the fragment to create the state directories;
+            # the .deb deliberately does not install it anywhere systemd reads.
+            cp packaging/filesystem-contract.toml "$stage/"
+            cp systemd/tmpfiles.d/cloud-init-rs.conf "$stage/"
+            cp README.md "$stage/"
+            tar -czf "dist/$stage.tar.gz" "$stage"
+          done
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tarballs
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  deb:
+    name: deb (${{ matrix.arch }})
+    needs: [verify, version]
+    # Native runner per architecture. Nothing is cross-compiled: a native build
+    # lets cargo-deb resolve the real shared-library dependencies, and runs the
+    # test suite on the architecture being shipped.
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: build in ubuntu 26.04
+        # The image, not the runner, decides what the package is built against,
+        # which is why the runner label above can lag behind 26.04.
+        run: |
+          set -eu
+          mkdir -p dist
+          docker run --rm \
+            -e VERSION='${{ needs.version.outputs.v }}' \
+            -v "$PWD:/src:ro" -v "$PWD/dist:/out" \
+            ubuntu:26.04 sh /src/packaging/build-deb.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: deb-${{ matrix.arch }}
+          path: dist/*.deb
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: [version, tarballs, deb]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: checksum
+        # One SHA256SUMS covering both artifact kinds, so there is a single
+        # thing to verify a download against.
+        run: cd dist && sha256sum ./*.tar.gz ./*.deb > SHA256SUMS && cat SHA256SUMS
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          generate_release_notes: true

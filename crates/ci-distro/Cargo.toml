@@ -1,0 +1,24 @@
+[package]
+name = "ci-distro"
+description = "The per-distribution facts and behaviour of cloudinit.distros"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ci-config.workspace = true
+ci-core.workspace = true
+ci-log.workspace = true
+ci-ssh.workspace = true
+ci-sys.workspace = true
+regex.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

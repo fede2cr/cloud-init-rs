@@ -1,2 +1,0 @@
-#cloud-config
-ssh_import_id: [user, 'gh:user', 'lp:user']

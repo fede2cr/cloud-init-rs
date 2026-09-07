@@ -1,0 +1,272 @@
+# Generated from packaging/filesystem-contract.toml. Do not edit.
+#
+# Regenerate with `cloud-init devel verify-layout --dump-apparmor`; a
+# unit test fails if this file and the contract disagree.
+#
+# Attached to the coexistence package's real binary paths under
+# /usr/libexec/cloud-init-rs/ rather than to /usr/bin/cloud-init, so it
+# confines this implementation whether or not update-alternatives currently
+# points at it, and so it can never be applied to the Python one by accident.
+#
+# It ships in complain mode. cloud-init exists to run administrator-supplied
+# code as root, and an enforcing profile written from the source rather than
+# from evidence would deny something real on the first unusual cloud it met.
+# PLAN.md 6.3 makes enforce mode a Phase 7 gate, after boots on real clouds
+# have been audited. Complain mode is not a placeholder in the meantime:
+# every access is logged, so the audit log becomes a measured inventory of
+# what cloud-init actually touches, which is the only honest basis for the
+# enforcing version.
+#
+# attach_disconnected is deliberately absent. The local stage runs early
+# enough that some paths cannot be resolved to the namespace root; in
+# complain mode that is a log entry rather than a failure, and leaving the
+# flag off is what makes those cases visible instead of waving them through
+# before anyone has read one.
+#
+# Child processes run unconfined. That is not a shortcut: runcmd, bootcmd
+# and the scripts_* modules exist to run tenant-supplied programs as root, so
+# there is no policy to write for them that would mean anything, and netplan,
+# useradd, apt-get and ssh-keygen carry profiles of their own where the
+# distribution ships them. Confining cloud-init itself is the part with
+# content.
+
+abi <abi/3.0>,
+
+include <tunables/global>
+
+profile cloud-init-rs /usr/libexec/cloud-init-rs/{cloud-init,cloud-id,cloud-init-per,ds-identify,cloud-init-generator} flags=(complain) {
+  include <abstractions/base>
+  include <abstractions/consoles>
+  include <abstractions/nameservice>
+  include <abstractions/openssl>
+  include <abstractions/ssl_certs>
+
+  # Ownership and mode work on files cloud-init does not own: authorized_keys
+  # written into a user's home, the 0400 datasource cache, the 0600 instance
+  # tree.
+  capability chown,
+  capability dac_override,
+  capability dac_read_search,
+  capability fowner,
+  capability fsetid,
+
+  # util.is_container reads PID 1's environment.
+  ptrace (read) peer=unconfined,
+
+  # A subprocess that outruns its deadline is killed; bootcmd caps a tenant
+  # command at an hour.
+  signal (send) set=(term, kill) peer=unconfined,
+  signal (receive) peer=unconfined,
+
+  # Metadata services: IMDS, the Azure wireserver, a NoCloud seedfrom URL, and
+  # the resolver underneath them. netlink raw is what getaddrinfo uses to
+  # enumerate interfaces.
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+  network netlink raw,
+
+  # The LXD datasource's socket, the /run/cloud-init/share sockets that
+  # --all-stages synchronises on, and sd_notify.
+  network unix stream,
+  network unix dgram,
+
+  # --- the filesystem contract ------------------------------------------
+  #
+  # Generated from packaging/filesystem-contract.toml, so the paths cloud-init
+  # may touch and the paths verify-layout audits it against cannot drift
+  # apart. `creator = "package"` entries are administrator configuration and
+  # are readable only; everything cloud-init creates itself is rw.
+  #
+  # Entries under /var/lib/cloud/instance/ appear here as
+  # /var/lib/cloud/instances/*/ because AppArmor mediates the path the kernel
+  # resolved, not the one the process asked for.
+
+  /etc/cloud/ r,
+  # world-readable on purpose: unprivileged tooling reads the datasource list
+  /etc/cloud/cloud.cfg r,
+  /etc/cloud/cloud.cfg.d/ r,
+  /etc/cloud/clean.d/ r,
+  /etc/cloud/templates/ r,
+  /var/lib/cloud/ rw,
+  /var/lib/cloud/data/ rw,
+  # the real file; /run/cloud-init/status.json is a relative symlink to it
+  /var/lib/cloud/data/status.json rw,
+  # written only by modules-final, so absent on a boot that never got that far
+  /var/lib/cloud/data/result.json rw,
+  /var/lib/cloud/handlers/ rw,
+  /var/lib/cloud/instances/ rw,
+  # one per instance id ever seen; the directory name is attacker-influenced
+  /var/lib/cloud/instances/*/ rw,
+  # points into instances/<iid>; absent until the first successful crawl
+  /var/lib/cloud/instance rw,
+  /var/lib/cloud/seed/ rw,
+  /var/lib/cloud/sem/ rw,
+  /var/lib/cloud/scripts/ rw,
+  /var/lib/cloud/scripts/per-boot/ rw,
+  /var/lib/cloud/scripts/per-instance/ rw,
+  /var/lib/cloud/scripts/per-once/ rw,
+  /var/lib/cloud/scripts/vendor/ rw,
+  /var/lib/cloud/instances/*/user-data.txt rw,
+  /var/lib/cloud/instances/*/user-data.txt.i rw,
+  /var/lib/cloud/instances/*/vendor-data.txt rw,
+  /var/lib/cloud/instances/*/vendor-data.txt.i rw,
+  /var/lib/cloud/instances/*/vendor-data2.txt rw,
+  /var/lib/cloud/instances/*/vendor-data2.txt.i rw,
+  /var/lib/cloud/instances/*/cloud-config.txt rw,
+  # Python's pickled datasource; the Rust implementation reads it but never writes it
+  /var/lib/cloud/instances/*/obj.pkl rw,
+  /var/lib/cloud/instances/*/network-config.json rw,
+  /var/lib/cloud/instances/*/sem/ rw,
+  /run/cloud-init/ rw,
+  # the redacted view; world-readable so unprivileged tooling can template against it
+  /run/cloud-init/instance-data.json rw,
+  # the unredacted twin of instance-data.json; the single most important mode in this file
+  /run/cloud-init/instance-data-sensitive.json rw,
+  /run/cloud-init/combined-cloud-config.json rw,
+  # symlink, not a file: status_wrapper() sym_links it to ../../var/lib/cloud/data/status.json on every stage
+  /run/cloud-init/status.json rw,
+  # symlink, as status.json; created only at the end of modules-final
+  /run/cloud-init/result.json rw,
+  # written by ds-identify, read by the stages
+  /run/cloud-init/cloud.cfg rw,
+  /run/cloud-init/ds-identify.log rw,
+  /run/cloud-init/cloud-init-generator.log rw,
+  /run/cloud-init/enabled rw,
+  /run/cloud-init/disabled rw,
+  # records which implementation ran this boot; see PLAN.md 6.7
+  /run/cloud-init/.impl rw,
+  # syslog owns it where rsyslog writes it, root where cloud-init does
+  /var/log/cloud-init.log rw,
+  /var/log/cloud-init-output.log rw,
+
+  # --- everything outside the contract ----------------------------------
+
+  # What identifies the machine: ds-identify reads DMI and the kernel command
+  # line, the datasources read the NIC list and the hypervisor UUID.
+  /proc/ r,
+  /proc/cmdline r,
+  /proc/meminfo r,
+  /proc/mounts r,
+  /proc/uptime r,
+  /proc/1/environ r,
+  /proc/@{pid}/{cmdline,mountinfo,mounts,stat} r,
+  /proc/sys/kernel/{hostname,osrelease} r,
+  /proc/sys/kernel/random/boot_id r,
+  /sys/class/dmi/id/* r,
+  /sys/class/net/ r,
+  /sys/class/net/** r,
+  /sys/devices/** r,
+  /sys/hypervisor/uuid r,
+  /run/systemd/system/ r,
+  /etc/os-release r,
+  /usr/lib/os-release r,
+  /etc/machine-id rw,
+  /etc/cloud/cloud-init.disabled r,
+  /dev/urandom r,
+
+  # Hostname, hosts, timezone and locale.
+  /etc/hostname rw,
+  /etc/hosts rw,
+  /etc/timezone rw,
+  /etc/localtime rw,
+  /etc/default/locale rw,
+  /etc/locale.gen rw,
+  /usr/share/zoneinfo/** r,
+
+  # Network rendering, and the files the activators read back.
+  /etc/netplan/ rw,
+  /etc/netplan/*.yaml rw,
+  /etc/network/interfaces.d/ rw,
+  /etc/network/interfaces.d/* rw,
+  /etc/NetworkManager/system-connections/ rw,
+  /etc/NetworkManager/system-connections/* rw,
+  /etc/systemd/network/ rw,
+  /etc/systemd/network/* rw,
+  /etc/sysconfig/network-scripts/ rw,
+  /etc/sysconfig/network-scripts/* rw,
+  /etc/resolv.conf rw,
+  /run/netplan/** rw,
+  /run/systemd/resolve/*.conf r,
+
+  # Accounts and SSH. cc_users_groups reads the databases its child useradd
+  # writes, cc_ssh replaces the host keys, and ssh_util writes authorized_keys
+  # into homes cloud-init does not own.
+  /etc/{passwd,group,shadow,gshadow} r,
+  /etc/sudoers.d/ rw,
+  /etc/sudoers.d/* rw,
+  /etc/doas.conf rw,
+  /etc/ssh/sshd_config r,
+  /etc/ssh/sshd_config.d/ rw,
+  /etc/ssh/sshd_config.d/*.conf rw,
+  /etc/ssh/ssh_host_* rw,
+  /root/.ssh/ rw,
+  /root/.ssh/authorized_keys* rw,
+  /home/*/.ssh/ rw,
+  /home/*/.ssh/authorized_keys* rw,
+
+  # Packages, repositories, certificates and syslog.
+  /etc/apt/ rw,
+  /etc/apt/** rw,
+  /etc/ca-certificates.conf rw,
+  /usr/local/share/ca-certificates/ rw,
+  /usr/local/share/ca-certificates/** rw,
+  /etc/rsyslog.d/ rw,
+  /etc/rsyslog.d/* rw,
+
+  # Storage. cc_mounts rewrites fstab; cc_disk_setup, cc_growpart and
+  # cc_resizefs inspect block devices before handing them to a child.
+  /etc/fstab rw,
+  /dev/ r,
+  /dev/disk/{,**} r,
+  /dev/sd[a-z]* r,
+  /dev/vd[a-z]* r,
+  /dev/nvme[0-9]*n[0-9]*{,p[0-9]*} r,
+  /dev/sr[0-9]* r,
+  /mnt/ rw,
+  /media/{,**} rw,
+
+  # Seeds and per-cloud state that is not cloud-init's own.
+  /var/lib/waagent/{,**} r,
+  /var/lib/hyperv/.kvp_pool_* rw,
+
+  # The instance directory holds more than the contract names: the handler,
+  # script and semaphore trees, and the marker files that decide whether the
+  # next boot is a new instance.
+  /var/lib/cloud/instances/*/{,**} rw,
+  /var/lib/cloud/{handlers,scripts,seed,sem}/{,**} rw,
+
+  # ci_sys::atomic writes `.<name>.<pid>.<seq>.tmp` beside its target and
+  # renames over it, so every directory cloud-init writes into needs the
+  # sibling as well as the file.
+  /etc/.*.tmp rw,
+  /etc/*/.*.tmp rw,
+  /run/cloud-init/.*.tmp rw,
+  /var/lib/cloud/**/.*.tmp rw,
+  /var/log/.*.tmp rw,
+
+  # A mounted seed medium, and the scratch trees mount_cb makes for it.
+  /tmp/ rw,
+  /tmp/** rwlk,
+  /var/tmp/ rw,
+  /var/tmp/** rwlk,
+
+  # --- child processes --------------------------------------------------
+  #
+  # Ux rather than ux, so the environment is scrubbed on the way in.
+  # ci_sys::subp clears it too; the two agreeing is worth more than either
+  # on its own. The generator runs ds-identify, which is one of ours, so that
+  # one stays in the profile -- and nothing else may match that path, because
+  # two overlapping rules with different exec transitions is a parse error,
+  # not a precedence question.
+  /usr/libexec/cloud-init-rs/* Px,
+  /{,usr/}{,s}bin/* Ux,
+  /usr/local/{,s}bin/* Ux,
+  /usr/lib/cloud-init/* Ux,
+  /snap/bin/* Ux,
+  /var/lib/cloud/instances/*/scripts/* Ux,
+  /var/lib/cloud/scripts/*/* Ux,
+
+  include if exists <local/cloud-init-rs>
+}

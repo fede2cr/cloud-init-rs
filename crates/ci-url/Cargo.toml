@@ -1,0 +1,27 @@
+[package]
+name = "ci-url"
+description = "Fetching for cloud-init-rs #include URLs and local paths"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+# Off by default: a package built against the distribution's libssl gets the
+# distribution's security updates. The static musl tarballs cannot, because
+# there is no libssl in the image they are unpacked into, so the release
+# workflow turns this on for those two targets only.
+[features]
+vendored-openssl = ["openssl/vendored"]
+
+[dependencies]
+ci-core.workspace = true
+ci-sys.workspace = true
+openssl.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

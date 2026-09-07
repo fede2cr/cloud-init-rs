@@ -1,9 +1,0 @@
-#cloud-config
-apt:
-  sources:
-    trunk-testing-ppa:
-      source: ppa:landscape/self-hosted-beta
-landscape:
-  client:
-    account_name: myaccount
-    computer_title: himom

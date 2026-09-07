@@ -1,2 +1,0 @@
-#cloud-config
-prefer_fqdn_over_hostname: false

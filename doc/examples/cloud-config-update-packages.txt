@@ -1,6 +1,0 @@
-#cloud-config
-
-# Upgrade the instance on first boot
-#
-# Default: false
-package_upgrade: true

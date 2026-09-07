@@ -1,5 +1,0 @@
-#cloud-config
-rh_subscription:
-  username: joe@foo.bar
-  ## Quote your password if it has symbols to be safe
-  password: '1234abcd'

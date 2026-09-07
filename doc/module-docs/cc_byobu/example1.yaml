@@ -1,2 +1,0 @@
-#cloud-config
-byobu_by_default: enable-user

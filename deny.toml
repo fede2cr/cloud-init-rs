@@ -1,0 +1,51 @@
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = []
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# The workspace's own crates are path-only and unpublished, so they have no
+# version requirement to wildcard against. Third-party wildcards still fail.
+allow-wildcard-paths = true
+deny = [
+    # The Phase 0 policy was "no OpenSSL anywhere in the tree". Phase 3 needs
+    # TLS for `https:` metadata and, later, the Azure certificate exchange, and
+    # the honest options were OpenSSL or a pure-Rust stack that would have had
+    # to bring its own trust decisions. `openssl` and `openssl-sys` are now
+    # allowed; see docs/ARCHITECTURE.md for what that bought and cost.
+    #
+    # `native-tls` stays out: it would be a second TLS configuration surface,
+    # reached through a wrapper that hides which knobs are actually being set.
+    { name = "native-tls" },
+]
+# `openssl-src` is in the tree behind the `vendored-openssl` feature, which
+# only the static musl tarballs turn on, and `all-features = true` above means
+# this check sees it. It is not banned, but nothing except that one release job
+# may enable it: a vendored copy of OpenSSL does not get the distribution's
+# security updates, so the .deb must keep linking against the system library.
+
+[licenses]
+version = 2
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "GPL-3.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

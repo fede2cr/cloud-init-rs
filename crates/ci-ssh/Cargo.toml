@@ -1,0 +1,21 @@
+[package]
+name = "ci-ssh"
+description = "The authorized-keys and sshd_config handling of cloudinit.ssh_util"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ci-core.workspace = true
+ci-log.workspace = true
+ci-sys.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true

@@ -1,7 +1,0 @@
-[NetDev]
-Kind=vlan
-MTUBytes=1400
-Name=vlan101
-
-[VLAN]
-Id=101

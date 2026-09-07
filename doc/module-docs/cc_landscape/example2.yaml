@@ -1,5 +1,0 @@
-#cloud-config
-landscape:
-  client:
-    computer_title: kiosk 1
-    account_name: Joe's Biz

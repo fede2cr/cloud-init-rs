@@ -1,2 +1,0 @@
-# This one is currently used only by the CloudSigma and SmartOS datasources.
-pyserial

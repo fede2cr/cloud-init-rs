@@ -1,0 +1,18 @@
+[package]
+name = "ci-gpg"
+description = "The gpg key helpers of cloudinit.gpg"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ci-log.workspace = true
+ci-sys.workspace = true
+regex.workspace = true
+tempfile.workspace = true

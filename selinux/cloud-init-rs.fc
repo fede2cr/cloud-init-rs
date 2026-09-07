@@ -1,0 +1,71 @@
+# Generated from packaging/filesystem-contract.toml. Do not edit.
+#
+# Regenerate with `cloud-init devel verify-layout --dump-selinux-fc`; a
+# unit test fails if this file and the contract disagree.
+#
+# These are the labels a Python-provisioned system carries. The Rust
+# binaries are labelled by equivalence rather than by a rule here, so
+# that they inherit whatever the base policy says about the Python
+# ones:
+#
+#   semanage fcontext -a -e /usr/bin/cloud-init \
+#       /usr/libexec/cloud-init-rs/cloud-init
+#
+# Path Filetype Context
+/etc/cloud	-d	gen_context(system_u:object_r:cloud_config_t,s0)
+# world-readable on purpose: unprivileged tooling reads the datasource list
+/etc/cloud/cloud\.cfg	--	gen_context(system_u:object_r:cloud_config_t,s0)
+/etc/cloud/cloud\.cfg\.d	-d	gen_context(system_u:object_r:cloud_config_t,s0)
+/etc/cloud/clean\.d	-d	gen_context(system_u:object_r:cloud_config_t,s0)
+/etc/cloud/templates	-d	gen_context(system_u:object_r:cloud_config_t,s0)
+/var/lib/cloud	-d	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/data	-d	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+# the real file; /run/cloud-init/status.json is a relative symlink to it
+/var/lib/cloud/data/status\.json	--	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+# written only by modules-final, so absent on a boot that never got that far
+/var/lib/cloud/data/result\.json	--	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/handlers	-d	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/instances	-d	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+# one per instance id ever seen; the directory name is attacker-influenced
+/var/lib/cloud/instances/[^/]*		gen_context(system_u:object_r:cloud_var_lib_t,s0)
+# points into instances/<iid>; absent until the first successful crawl
+/var/lib/cloud/instance	-l	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/seed	-d	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/sem	-d	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/scripts	-d	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/scripts/per-boot	-d	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/scripts/per-instance	-d	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/scripts/per-once	-d	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/scripts/vendor	-d	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/instance/user-data\.txt	--	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/instance/user-data\.txt\.i	--	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/instance/vendor-data\.txt	--	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/instance/vendor-data\.txt\.i	--	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/instance/vendor-data2\.txt	--	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/instance/vendor-data2\.txt\.i	--	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/instance/cloud-config\.txt	--	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+# Python's pickled datasource; the Rust implementation reads it but never writes it
+/var/lib/cloud/instance/obj\.pkl	--	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/instance/network-config\.json	--	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/var/lib/cloud/instance/sem	-d	gen_context(system_u:object_r:cloud_var_lib_t,s0)
+/run/cloud-init	-d	gen_context(system_u:object_r:cloud_var_run_t,s0)
+# the redacted view; world-readable so unprivileged tooling can template against it
+/run/cloud-init/instance-data\.json	--	gen_context(system_u:object_r:cloud_var_run_t,s0)
+# the unredacted twin of instance-data.json; the single most important mode in this file
+/run/cloud-init/instance-data-sensitive\.json	--	gen_context(system_u:object_r:cloud_var_run_t,s0)
+/run/cloud-init/combined-cloud-config\.json	--	gen_context(system_u:object_r:cloud_var_run_t,s0)
+# symlink, not a file: status_wrapper() sym_links it to ../../var/lib/cloud/data/status.json on every stage
+/run/cloud-init/status\.json	-l	gen_context(system_u:object_r:cloud_var_run_t,s0)
+# symlink, as status.json; created only at the end of modules-final
+/run/cloud-init/result\.json	-l	gen_context(system_u:object_r:cloud_var_run_t,s0)
+# written by ds-identify, read by the stages
+/run/cloud-init/cloud\.cfg	--	gen_context(system_u:object_r:cloud_var_run_t,s0)
+/run/cloud-init/ds-identify\.log	--	gen_context(system_u:object_r:cloud_var_run_t,s0)
+/run/cloud-init/cloud-init-generator\.log	--	gen_context(system_u:object_r:cloud_var_run_t,s0)
+/run/cloud-init/enabled	--	gen_context(system_u:object_r:cloud_var_run_t,s0)
+/run/cloud-init/disabled	--	gen_context(system_u:object_r:cloud_var_run_t,s0)
+# records which implementation ran this boot; see PLAN.md 6.7
+/run/cloud-init/\.impl	--	gen_context(system_u:object_r:cloud_var_run_t,s0)
+# syslog owns it where rsyslog writes it, root where cloud-init does
+/var/log/cloud-init\.log	--	gen_context(system_u:object_r:cloud_log_t,s0)
+/var/log/cloud-init-output\.log	--	gen_context(system_u:object_r:cloud_log_t,s0)

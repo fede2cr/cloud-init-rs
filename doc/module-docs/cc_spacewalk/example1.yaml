@@ -1,2 +1,0 @@
-#cloud-config
-spacewalk: {activation_key: <key>, proxy: <proxy host>, server: <url>}

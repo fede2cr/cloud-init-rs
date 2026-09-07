@@ -1,3 +1,0 @@
-#cloud-config
-rpi:
-  enable_usb_gadget: true

@@ -1,4 +1,0 @@
-#cloud-config
-ubuntu_pro:
-  enable: []
-  enable_beta: []

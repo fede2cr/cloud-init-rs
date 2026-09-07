@@ -1,2 +1,0 @@
-#cloud-config
-apt_pipelining: 3

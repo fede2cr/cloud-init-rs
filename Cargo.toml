@@ -1,0 +1,126 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/ci-sys",
+    "crates/ci-config",
+    "crates/ci-template",
+    "crates/ci-core",
+    "crates/ci-datasource",
+    "crates/ci-distro",
+    "crates/ci-gpg",
+    "crates/ci-schema",
+    "crates/ci-url",
+    "crates/ci-report",
+    "crates/ci-log",
+    "crates/ci-modules",
+    "crates/ci-net",
+    "crates/ci-ssh",
+    "crates/ci-userdata",
+    "crates/cloud-init",
+    "crates/cloud-id",
+    "crates/cloud-init-per",
+    "crates/ds-identify",
+    "crates/cloud-init-generator",
+]
+
+[workspace.package]
+# Stamped from the `v*` tag by .github/workflows/release.yml. Anything built
+# outside a tagged release is 0.0.0 and is not a release build.
+version = "0.0.0"
+edition = "2021"
+# MSRV tracks the oldest toolchain in the supported LTS set, not the newest stable.
+rust-version = "1.82"
+license = "Apache-2.0 OR GPL-3.0-only"
+repository = "https://github.com/fede2/cloud-init-rs"
+# Ships as distro packages and release tarballs, not crates.io libraries. This
+# also lets the internal path deps stay version-less without tripping
+# cargo-deny's wildcard ban.
+publish = false
+
+[workspace.dependencies]
+# Path-only: these are never published to crates.io, and a version here would be
+# a second place the release tag has to be stamped into.
+ci-config = { path = "crates/ci-config" }
+ci-core = { path = "crates/ci-core" }
+ci-datasource = { path = "crates/ci-datasource" }
+ci-distro = { path = "crates/ci-distro" }
+ci-gpg = { path = "crates/ci-gpg" }
+ci-report = { path = "crates/ci-report" }
+ci-log = { path = "crates/ci-log" }
+ci-modules = { path = "crates/ci-modules" }
+ci-net = { path = "crates/ci-net" }
+ci-schema = { path = "crates/ci-schema" }
+ci-ssh = { path = "crates/ci-ssh" }
+ci-sys = { path = "crates/ci-sys" }
+ci-template = { path = "crates/ci-template" }
+ci-url = { path = "crates/ci-url" }
+ci-userdata = { path = "crates/ci-userdata" }
+
+# Pure-Rust inflate only: user-data arrives from the network, so no C decoder.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
+# Constants only, for the `open(2)` flags `std` does not expose. These are not
+# portable numbers -- `O_NOFOLLOW` is 0o400000 on x86_64 and 0o100000 on
+# aarch64 -- and hardcoding one of them silently disabled the symlink defence
+# on every arm64 build. See docs/COMPAT.md deviation 124.
+libc = { version = "0.2", default-features = false }
+
+# The one C dependency, and a deliberate exception to the pure-Rust rule: TLS
+# and the Azure certificate exchange both need it, and the alternatives were
+# worse. See docs/COMPAT.md and docs/ARCHITECTURE.md.
+openssl = "0.10"
+
+clap = { version = "4", default-features = false, features = [
+    "std",
+    "help",
+    "usage",
+    "error-context",
+    "derive",
+    "wrap_help",
+] }
+minijinja = { version = "2", default-features = false, features = [
+    "builtins",
+    "macros",
+    "multi_template",
+    "serde",
+] }
+regex = { version = "1", default-features = false, features = [
+    "std",
+    "perf",
+    "unicode-case",
+    "unicode-perl",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+yaml-rust2 = { version = "0.11", default-features = false }
+tempfile = "3"
+thiserror = "2"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Noise from `pedantic` that fights the style used here.
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+# Correctness/robustness lints we do want to be hard failures.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+integer_division = "warn"
+undocumented_unsafe_blocks = "deny"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

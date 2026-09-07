@@ -1,2 +1,0 @@
-#cloud-config
-ssh_key_console_blacklist: [rsa]

@@ -1,4 +1,0 @@
-#cloud-config
-updates:
-  network:
-    when: [boot, hotplug]

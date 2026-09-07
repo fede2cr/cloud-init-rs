@@ -1,2 +1,0 @@
-#cloud-config
-vendor_data: {enabled: false}

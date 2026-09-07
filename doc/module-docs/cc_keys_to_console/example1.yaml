@@ -1,3 +1,0 @@
-#cloud-config
-ssh:
-  emit_keys_to_console: false

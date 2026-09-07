@@ -1,0 +1,515 @@
+# The filesystem contract.
+#
+# One machine-readable description of every path cloud-init owns at runtime,
+# and the single source of truth behind:
+#
+#   * systemd/tmpfiles.d/cloud-init-rs.conf   (generated; see the test in
+#     crates/ci-core/src/layout.rs that fails if the two disagree)
+#   * `cloud-init devel verify-layout`, which audits a live system
+#   * the runtime checks ci-core applies when it creates these paths itself
+#   * the SELinux file-context rules and the deb/rpm file lists (later
+#     increments; the columns they need are already here)
+#
+# The point of writing it down is that the Rust and Python implementations
+# share `/var/lib/cloud`, `/run/cloud-init` and `/etc/cloud`. Anything shared
+# has to be specified rather than inherited, or a switch in either direction
+# silently changes permissions on a directory that outlives the switch.
+#
+# Every mode, owner and group below was read off a system provisioned by
+# cloud-init 26.1, not chosen. Where the port would have picked something
+# stricter, the upstream value wins and the difference is argued in
+# docs/COMPAT.md instead.
+#
+# Grammar (deliberately a strict subset of TOML, parsed by
+# crates/ci-sys/src/layout parser — no parser dependency is pulled in for it):
+#
+#   * `#` to end of line is a comment; blank lines are ignored
+#   * `[[path]]` opens an entry
+#   * `key = "value"` — every value is a double-quoted string with no escapes
+#   * unknown keys and missing required keys are errors, not warnings
+#
+# Keys:
+#   path          absolute, no trailing slash. A trailing `/*` means "every
+#                 direct child of this directory", used where the names are
+#                 instance ids or admin-chosen filenames.
+#   kind          dir | file | symlink
+#   mode          four octal digits. Ignored for `symlink`.
+#   owner, group  names, resolved through /etc/passwd and /etc/group under the
+#                 audited root. `a|b` accepts either, which is needed where the
+#                 owner depends on whether rsyslog or cloud-init created the
+#                 file. The first name is the one the generated files use.
+#   presence      required — must exist on a provisioned system
+#                 optional — audited only if present
+#   creator       package — shipped by the .deb/.rpm
+#                 runtime — created by cloud-init while it runs
+#                 tmpfiles — created by systemd-tmpfiles at boot
+#   selinux_type  the type the file must carry where SELinux is enforcing.
+#   note          free text; carried into the generated files as a comment.
+
+# --- /etc/cloud: admin configuration, shared with the Python implementation.
+
+[[path]]
+path = "/etc/cloud"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "package"
+selinux_type = "cloud_config_t"
+
+[[path]]
+path = "/etc/cloud/cloud.cfg"
+kind = "file"
+mode = "0644"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "package"
+selinux_type = "cloud_config_t"
+note = "world-readable on purpose: unprivileged tooling reads the datasource list"
+
+[[path]]
+path = "/etc/cloud/cloud.cfg.d"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "package"
+selinux_type = "cloud_config_t"
+
+[[path]]
+path = "/etc/cloud/clean.d"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "package"
+selinux_type = "cloud_config_t"
+
+[[path]]
+path = "/etc/cloud/templates"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "package"
+selinux_type = "cloud_config_t"
+
+# --- /var/lib/cloud: durable state, shared with the Python implementation.
+# Nothing here is ever removed or re-moded by an install or a switch.
+
+[[path]]
+path = "/var/lib/cloud"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "tmpfiles"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/data"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "tmpfiles"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/data/status.json"
+kind = "file"
+mode = "0644"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+note = "the real file; /run/cloud-init/status.json is a relative symlink to it"
+
+[[path]]
+path = "/var/lib/cloud/data/result.json"
+kind = "file"
+mode = "0644"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+note = "written only by modules-final, so absent on a boot that never got that far"
+
+[[path]]
+path = "/var/lib/cloud/handlers"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "tmpfiles"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/instances"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "tmpfiles"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/instances/*"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+note = "one per instance id ever seen; the directory name is attacker-influenced"
+
+[[path]]
+path = "/var/lib/cloud/instance"
+kind = "symlink"
+mode = "0777"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+note = "points into instances/<iid>; absent until the first successful crawl"
+
+[[path]]
+path = "/var/lib/cloud/seed"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "tmpfiles"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/sem"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "tmpfiles"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/scripts"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "tmpfiles"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/scripts/per-boot"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "tmpfiles"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/scripts/per-instance"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "tmpfiles"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/scripts/per-once"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "tmpfiles"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/scripts/vendor"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "tmpfiles"
+selinux_type = "cloud_var_lib_t"
+
+# --- The instance directory. Everything derived from user-data or vendor-data
+# is 0600: it is tenant-supplied and routinely contains credentials.
+
+[[path]]
+path = "/var/lib/cloud/instance/user-data.txt"
+kind = "file"
+mode = "0600"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/instance/user-data.txt.i"
+kind = "file"
+mode = "0600"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/instance/vendor-data.txt"
+kind = "file"
+mode = "0600"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/instance/vendor-data.txt.i"
+kind = "file"
+mode = "0600"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/instance/vendor-data2.txt"
+kind = "file"
+mode = "0600"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/instance/vendor-data2.txt.i"
+kind = "file"
+mode = "0600"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/instance/cloud-config.txt"
+kind = "file"
+mode = "0600"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/instance/obj.pkl"
+kind = "file"
+mode = "0400"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+note = "Python's pickled datasource; the Rust implementation reads it but never writes it"
+
+[[path]]
+path = "/var/lib/cloud/instance/network-config.json"
+kind = "file"
+mode = "0600"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+
+[[path]]
+path = "/var/lib/cloud/instance/sem"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_lib_t"
+
+# --- /run/cloud-init: this boot's state. Recreated from empty every boot, so
+# a mode error here is a one-boot exposure rather than a permanent one — which
+# is exactly why it is easy to get wrong and worth auditing.
+
+[[path]]
+path = "/run/cloud-init"
+kind = "dir"
+mode = "0755"
+owner = "root"
+group = "root"
+presence = "required"
+creator = "tmpfiles"
+selinux_type = "cloud_var_run_t"
+
+[[path]]
+path = "/run/cloud-init/instance-data.json"
+kind = "file"
+mode = "0644"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_run_t"
+note = "the redacted view; world-readable so unprivileged tooling can template against it"
+
+[[path]]
+path = "/run/cloud-init/instance-data-sensitive.json"
+kind = "file"
+mode = "0600"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_run_t"
+note = "the unredacted twin of instance-data.json; the single most important mode in this file"
+
+[[path]]
+path = "/run/cloud-init/combined-cloud-config.json"
+kind = "file"
+mode = "0600"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_run_t"
+
+[[path]]
+path = "/run/cloud-init/status.json"
+kind = "symlink"
+mode = "0777"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_run_t"
+note = "symlink, not a file: status_wrapper() sym_links it to ../../var/lib/cloud/data/status.json on every stage"
+
+[[path]]
+path = "/run/cloud-init/result.json"
+kind = "symlink"
+mode = "0777"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_run_t"
+note = "symlink, as status.json; created only at the end of modules-final"
+
+[[path]]
+path = "/run/cloud-init/cloud.cfg"
+kind = "file"
+mode = "0644"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_run_t"
+note = "written by ds-identify, read by the stages"
+
+[[path]]
+path = "/run/cloud-init/ds-identify.log"
+kind = "file"
+mode = "0644"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_run_t"
+
+[[path]]
+path = "/run/cloud-init/cloud-init-generator.log"
+kind = "file"
+mode = "0644"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_run_t"
+
+[[path]]
+path = "/run/cloud-init/enabled"
+kind = "file"
+mode = "0644"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_run_t"
+
+[[path]]
+path = "/run/cloud-init/disabled"
+kind = "file"
+mode = "0644"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_run_t"
+
+[[path]]
+path = "/run/cloud-init/.impl"
+kind = "file"
+mode = "0644"
+owner = "root"
+group = "root"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_var_run_t"
+note = "records which implementation ran this boot; see PLAN.md 6.7"
+
+# --- Logs. Group `adm` is what makes these readable to administrators without
+# root, and it is the one place cloud-init does not own the group.
+
+[[path]]
+path = "/var/log/cloud-init.log"
+kind = "file"
+mode = "0640"
+owner = "root|syslog"
+group = "adm"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_log_t"
+note = "syslog owns it where rsyslog writes it, root where cloud-init does"
+
+[[path]]
+path = "/var/log/cloud-init-output.log"
+kind = "file"
+mode = "0640"
+owner = "root"
+group = "adm"
+presence = "optional"
+creator = "runtime"
+selinux_type = "cloud_log_t"
