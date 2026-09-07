@@ -80,13 +80,9 @@ assets = [
         "usr/share/cloud-init-rs/apparmor/cloud-init-rs",
         "644",
     ],
+    # README only. PLAN.md and everything under docs/ are development
+    # documents and are deliberately not shipped.
     ["../../README.md", "usr/share/doc/cloud-init-rs/README.md", "644"],
-    ["../../docs/COMPAT.md", "usr/share/doc/cloud-init-rs/COMPAT.md", "644"],
-    [
-        "../../docs/ARCHITECTURE.md",
-        "usr/share/doc/cloud-init-rs/ARCHITECTURE.md",
-        "644",
-    ],
 ]
 extended-description = """\
 cloud-init-rs is a memory-safe reimplementation of Canonical's cloud-init. It \

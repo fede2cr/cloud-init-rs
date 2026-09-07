@@ -1,3 +1,7 @@
 /target
 **/*.rs.bk
 Cargo.lock.orig
+
+# Development-only documents: not shipped in any package and not published.
+/PLAN.md
+/docs/
