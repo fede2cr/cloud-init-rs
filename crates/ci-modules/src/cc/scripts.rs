@@ -194,6 +194,17 @@ mod tests {
 
     use super::*;
 
+    /// These tests write a script and then exec it. A sibling test that forks in
+    /// between inherits the still-open write fd, so the exec fails with
+    /// `ETXTBSY` and `runparts` reports the script as a failure — the same race
+    /// `cloud-init-generator`'s tests hit. Every test here that writes a script
+    /// or runs one takes this lock.
+    fn serialized() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     /// Writes `body` into `dir/name` and makes it executable unless `mode` says
     /// otherwise.
     fn script(dir: &Path, name: &str, body: &str, mode: u32) {
@@ -237,6 +248,7 @@ mod tests {
 
     #[test]
     fn executables_run_in_sorted_order() {
+        let _guard = serialized();
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().join("out");
         let scripts = dir.path().join("cloud/scripts/per-boot");
@@ -274,6 +286,7 @@ mod tests {
 
     #[test]
     fn every_script_runs_even_after_one_fails() {
+        let _guard = serialized();
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().join("out");
         let scripts = dir.path().join("cloud/scripts/per-instance");
@@ -294,6 +307,7 @@ mod tests {
 
     #[test]
     fn the_user_scripts_come_from_the_instance_link() {
+        let _guard = serialized();
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().join("out");
         let real = dir.path().join("cloud/instances/i-test/scripts");
@@ -314,6 +328,7 @@ mod tests {
 
     #[test]
     fn the_vendor_prefix_wraps_each_script() {
+        let _guard = serialized();
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().join("out");
         let real = dir.path().join("cloud/instances/i-test/scripts/vendor");
