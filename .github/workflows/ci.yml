@@ -69,7 +69,14 @@ jobs:
 
   differential:
     name: parity vs python cloud-init
-    runs-on: ubuntu-latest
+    # Pinned to the release that ships the COMPAT_VERSION oracle rather than
+    # ubuntu-latest. The port reproduces upstream's error strings verbatim, and
+    # some of those come from CPython itself: `x in 5` is "not a container or
+    # iterable" on the 26.04 Python and "not iterable" on older ones, so an
+    # older runner fails ~40 cases in cc_puppet/salt_minion/mcollective/chef
+    # against a port that is correct for its target. ubuntu-26.04 is a preview
+    # image; if it is withdrawn, run this job in an `ubuntu:26.04` container.
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - run: rustup toolchain install stable --profile minimal
@@ -86,6 +93,20 @@ jobs:
         run: |
           /usr/bin/cloud-init --version
           ./target/debug/cloud-init --version
+      # A mismatched oracle shows up as dozens of unrelated-looking diffs, so
+      # name the cause here instead of leaving it to be rediscovered.
+      - name: packaged cloud-init must match COMPAT_VERSION
+        run: |
+          set -eu
+          want=$(grep -m1 'COMPAT_VERSION' crates/ci-core/src/version.rs | cut -d'"' -f2)
+          got=$(/usr/bin/cloud-init --version 2>&1 | awk '{print $NF}')
+          case "$got" in
+            "$want"|"$want"-*|"$want".*) ;;
+            *)
+              echo "::error::runner ships cloud-init $got but the port targets $want; the differential oracle is wrong"
+              exit 1
+              ;;
+          esac
       # A skipped case looks the same as a passing one in the summary line, so
       # assert the drivers exist rather than trusting the count.
       - name: check differential drivers were built

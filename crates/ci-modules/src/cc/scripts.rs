@@ -67,7 +67,7 @@ fn exe_prefix(vendor_data: Option<&Value>) -> Result<Vec<String>, String> {
         Some(Value::Object(_)) => {}
         Some(other) => {
             return Err(format!(
-                "argument of type '{}' is not iterable",
+                "argument of type '{}' is not a container or iterable",
                 ci_config::type_name(other)
             ))
         }
